@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Bezier Curve Assignment</title>
+  <style>
+    body { 
+      background: #222; color: #fff; margin: 0; padding: 0; 
+      font-family: "Times New Roman", Times, serif;
+      display: flex; flex-direction: column; align-items: center;
+    }
+    canvas { background: #181818; margin-top: 28px; border-radius: 6px; }
+    h1 { font-size: 24px; text-align: center; margin-top: 15px; }
+  </style>
+</head>
+
+<body>
+  <h1>Cubic Bezier Curve </h1>
+  <canvas id="bezierCanvas" width="1000" height="600"></canvas>
+  <script>
+    
+    const FPS = 60;
+    const TIMESTEP = 1 / FPS;
+    const SPRING_K = 7; 
+    const DAMPING = 5; 
+    const MASS = 1;
+
+    let canvas = document.getElementById('bezierCanvas');
+    let ctx = canvas.getContext('2d');
+
+// POINTS
+    let points = [
+      { x: 80,  y: 400, type: 'fixed' },   // P0 this point is non moveable
+      { x: 290, y: 120, type: 'dynamic', vx: 0, vy: 0, tx: 290, ty: 120 }, // P1 
+      { x: 610, y: 420, type: 'dynamic', vx: 0, vy: 0, tx: 610, ty: 420 }, // P2
+      { x: 820, y: 160, type: 'fixed' }    // P3 this point is non moveable
+    ];
+
+    
+    let dragIdx = null, dragOffset = {x:0,y:0};
+
+    canvas.addEventListener('mousedown', e => {
+      let mouse = getMouse(canvas, e);
+     
+      for (let i = 0; i < points.length; ++i) {
+        if (points[i].type==='dynamic') {
+          if (dist(mouse, points[i]) < 18) {
+            
+            dragIdx = i;
+            dragOffset.x = mouse.x - points[i].x;
+            dragOffset.y = mouse.y - points[i].y;
+            points[i].tx = points[i].x;
+            points[i].ty = points[i].y;
+            return;
+          }
+        }
+      }
+    });
+    
+    canvas.addEventListener('mousemove', e => {
+      if (dragIdx !== null) {
+        let mouse = getMouse(canvas, e);
+        points[dragIdx].tx = mouse.x - dragOffset.x;
+        points[dragIdx].ty = mouse.y - dragOffset.y;
+      }
+    });
+    
+    window.addEventListener('mouseup', e => dragIdx = null);
+
+  
+    function stepPhysics(pt) {
+      
+      let dx = pt.x - pt.tx, dy = pt.y - pt.ty;
+      let ax = (-SPRING_K * dx - DAMPING * pt.vx) / MASS;
+      let ay = (-SPRING_K * dy - DAMPING * pt.vy) / MASS;
+      pt.vx += ax * TIMESTEP;
+      pt.vy += ay * TIMESTEP;
+      pt.x += pt.vx * TIMESTEP;
+      pt.y += pt.vy * TIMESTEP;
+    
+     }
+
+    
+    function draw() {
+      
+      for (let idx of [1,2]) stepPhysics(points[idx]);
+
+      
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+
+      
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      for(let pt of points) ctx.lineTo(pt.x, pt.y);
+      ctx.strokeStyle = "#444";
+      ctx.setLineDash([6,5]);
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      
+// Bezier path
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      for (let t = 0; t <= 1.001; t += 0.0125) {
+        let pt = computeBezier(t);
+        ctx.lineTo(pt.x, pt.y);
+      }
+      
+
+      ctx.strokeStyle = "#16f78c";
+      ctx.lineWidth = 4;
+      ctx.stroke();
+
+     
+      for (let i=0; i<points.length; ++i) {
+        ctx.beginPath();
+        ctx.arc(points[i].x, points[i].y, 13, 0, 2*Math.PI);
+        ctx.fillStyle = (points[i].type==='dynamic') ? "#f7ca16" : "#16aaf7";
+        ctx.fill();
+        ctx.strokeStyle = "#fff";
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+        ctx.font = "14px monospace";
+        ctx.fillStyle = "#fff";
+        ctx.fillText("P"+i, points[i].x+16, points[i].y-10);
+      }
+
+      
+
+//tangent lines 
+      for (let t = 0.12; t < 0.96; t += 0.16) {
+        let pt = computeBezier(t);
+        let tan = computeTangent(t);
+        
+        let mag = Math.sqrt(tan.x*tan.x + tan.y*tan.y);
+        let nx = tan.x / mag;
+        let ny = tan.y / mag;
+        
+        ctx.beginPath();
+        ctx.moveTo(pt.x, pt.y);
+        ctx.lineTo(pt.x + nx*41, pt.y + ny*41);
+        ctx.strokeStyle = "#fc5afa";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    }
+
+    
+    function computeBezier(t) {
+      let p0 = points[0], p1 = points[1], p2 = points[2], p3 = points[3];  //the points we need to declare 
+      let x = Math.pow(1-t,3)*p0.x + 3*Math.pow(1-t,2)*t *p1.x + 3*(1-t)*t*t* p2.x + Math.pow(t,3)* p3.x;
+      let y = Math.pow(1-t,3)*p0.y + 3*Math.pow(1-t,2)*t *p1.y + 3*(1-t)*t*t* p2.y + Math.pow(t,3)* p3.y;
+      return {x, y};
+    }
+   
+
+    function computeTangent(t) {
+      let p0 = points[0], p1 = points[1], p2 = points[2], p3 = points[3];
+      let dx = 3*Math.pow(1-t,2)* (p1.x - p0.x)
+             +6*(1-t)*t*(p2.x - p1.x)
+             +3*Math.pow(t,2)* (p3.x - p2.x);
+      let dy = 3*Math.pow(1-t,2)* (p1.y - p0.y)
+             +6*(1-t)*t*(p2.y - p1.y)
+             +3*Math.pow(t,2)* (p3.y - p2.y);
+      return {x: dx, y: dy};
+    }
+
+    
+    function loop() {
+      draw();
+      requestAnimationFrame(loop);
+    }
+    loop();
+
+    
+    function dist(a,b) { return Math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2); }
+    function getMouse(canvas, evt) {
+      let rect = canvas.getBoundingClientRect();
+      
+      return {
+        x: (evt.clientX-rect.left)*(canvas.width/rect.width),
+        y: (evt.clientY-rect.top)*(canvas.height/rect.height)
+      };
+    }
+
+  </script>
+</body>
+</html>
